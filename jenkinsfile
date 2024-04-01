@@ -1,20 +1,38 @@
 pipeline {
-  agent none
+    agent any
+    tools {
+        maven 'Maven'
+    }
 
-        stages {
-  
-        docker
-          {
-            image 'maven:3.8.6-jdk-8'
-          }
-  
-          stage("build & sonarqube") {
-            agent any
+    environment {
+        SONARQUBE_SERVER_URL = 'http://172.28.164.35:9000'
+    }
+
+    stages {
+        stage('Git Checkout') {
             steps {
-              withSonarQubeEnv('sonarqube-server') {
-                sh 'mvn clean package sonar:sonar'
-              }
+                checkout scmGit(branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/saktil/maven-sonar.git']])
+                echo 'Git Checkout Completed'
             }
-          }
         }
-      }
+
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    try {
+                        withSonarQubeEnv('sonarqube-server') {
+                            sh '''mvn clean verify sonar:sonar \
+                                   -Dsonar.projectKey=testing \
+                                   -Dsonar.projectName='testing' \
+                                   -Dsonar.host.url=${SONARQUBE_SERVER_URL}'''
+                            echo 'SonarQube Analysis Completed'
+                        }
+                    } catch (Exception e) {
+                        currentBuild.result = 'FAILURE'
+                        echo "SonarQube analysis failed: ${e.message}"
+                    }
+                }
+            }
+        }
+    }
+}
